@@ -1,0 +1,11 @@
+# Mac files
+
+*/.DS_Store
+
+# Makefiles
+
+Makefile
+
+# Executables
+
+project_dac
