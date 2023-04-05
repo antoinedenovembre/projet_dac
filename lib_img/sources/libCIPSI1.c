@@ -128,19 +128,7 @@ float scoreVinet(IMAGE im1, IMAGE im2)
     {
         for (j = 0; j < nbRegionsTest; j++)
         {
-            float overlap = 0;
-            for (k = regionsRef[i].y1; k <= regionsRef[i].y2; k++)
-            {
-                for (l = regionsRef[i].x1; l <= regionsRef[i].x2; l++)
-                {
-                    if (regionsTest[j].x1 <= l && l <= regionsTest[j].x2 &&
-                        regionsTest[j].y1 <= k && k <= regionsTest[j].y2 &&
-                        im1.pixel[k][l] == 255 && im2.pixel[k][l] == 255)
-                    {
-                        overlap++;
-                    }
-                }
-            }
+            float overlap = computeOverlap(regionsRef[i], regionsTest[j]);
             if (overlap > 0)
             {
                 nbPairsCommuns++;
@@ -161,7 +149,6 @@ float scoreVinet(IMAGE im1, IMAGE im2)
 
     return (2 * precision * recall) / (precision + recall);
 }
-
 
 typedef struct
 {
