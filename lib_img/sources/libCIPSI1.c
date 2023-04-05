@@ -11,6 +11,158 @@
 
 /* static -> non extern */
 
+float scoreIOU(IMAGE im1, IMAGE im2)
+{
+	int i, j;
+	int nbPixelsCommuns = 0;
+	int nbPixelsUnion = 0;
+
+	for (i = 0; i<im1.Nblig; i++)
+		for (j = 0; j<im1.Nbcol; j++) {
+			if (im1.pixel[i][j] == 255 && im2.pixel[i][j] == 255)
+				nbPixelsCommuns++;
+			if (im1.pixel[i][j] == 255 || im2.pixel[i][j] == 255)
+				nbPixelsUnion++;
+		}
+
+	return((float)nbPixelsCommuns / (float)nbPixelsUnion);
+}
+
+// Vinet too many functions, see later
+
+REGION* findRegions(IMAGE im, int* nbRegions)
+{
+    // Allocate memory for the maximum possible number of regions
+    int maxNbRegions = (im.Nblig * im.Nbcol) / 4;
+    REGION* regions = malloc(maxNbRegions * sizeof(REGION));
+
+    // Find all regions in the image
+    *nbRegions = 0;
+    int i, j;
+    for (i = 0; i < im.Nblig; i++)
+    {
+        for (j = 0; j < im.Nbcol; j++)
+        {
+            if (im.pixel[i][j] == 255)
+            {
+                // Expand the current region until it covers all adjacent pixels
+                REGION region = {j, i, j, i};
+                expandRegion(im, &region);
+                regions[*nbRegions] = region;
+                (*nbRegions)++;
+            }
+        }
+    }
+
+    // Trim the excess memory used for the regions array
+    regions = realloc(regions, (*nbRegions) * sizeof(REGION));
+
+    return regions;
+}
+
+void expandRegion(IMAGE im, REGION* region)
+{
+    int x, y;
+    for (x = region->x1; x <= region->x2; x++)
+    {
+        for (y = region->y1; y <= region->y2; y++)
+        {
+            if (im.pixel[y][x] == 255)
+            {
+                // Expand the region horizontally
+                if (x < region->x1) region->x1 = x;
+                if (x > region->x2) region->x2 = x;
+                // Expand the region vertically
+                if (y < region->y1) region->y1 = y;
+                if (y > region->y2) region->y2 = y;
+                // Clear the pixel to avoid revisiting it
+                im.pixel[y][x] = 0;
+                // Recursively expand the adjacent pixels
+                expandRegion(im, region);
+            }
+        }
+    }
+}
+
+float computeOverlap(REGION r1, REGION r2)
+{
+    int x1 = MAX(r1.x1, r2.x1);
+    int y1 = MAX(r1.y1, r2.y1);
+    int x2 = MIN(r1.x2, r2.x2);
+    int y2 = MIN(r1.y2, r2.y2);
+
+    if (x1 > x2 || y1 > y2)
+    {
+        // The regions do not overlap
+        return 0.0f;
+    }
+    else
+    {
+        // Compute the overlap score
+        int nbPixelsIntersection = (x2 - x1 + 1) * (y2 - y1 + 1);
+        int nbPixelsUnion = (r1.x2 - r1.x1 + 1) * (r1.y2 - r1.y1 + 1) +
+                            (r2.x2 - r2.x1 + 1) * (r2.y2 - r2.y1 + 1) -
+                            nbPixelsIntersection;
+        return (float)nbPixelsIntersection / (float)nbPixelsUnion;
+    }
+}
+
+
+float scoreVinet(IMAGE im1, IMAGE im2)
+{
+    int i, j, k, l;
+    int nbPairsCommuns = 0;
+    int nbPairsInRef = 0;
+    int nbPairsInTest = 0;
+
+    // Find all pairs of regions in the ground truth image
+    int nbRegionsRef = 0;
+    REGION *regionsRef = findRegions(im1, &nbRegionsRef);
+
+    // Find all pairs of regions in the processed image
+    int nbRegionsTest = 0;
+    REGION *regionsTest = findRegions(im2, &nbRegionsTest);
+
+    // Compute the overlap score for each pair of regions
+    for (i = 0; i < nbRegionsRef; i++)
+    {
+        for (j = 0; j < nbRegionsTest; j++)
+        {
+            float overlap = 0;
+            for (k = regionsRef[i].y1; k <= regionsRef[i].y2; k++)
+            {
+                for (l = regionsRef[i].x1; l <= regionsRef[i].x2; l++)
+                {
+                    if (regionsTest[j].x1 <= l && l <= regionsTest[j].x2 &&
+                        regionsTest[j].y1 <= k && k <= regionsTest[j].y2 &&
+                        im1.pixel[k][l] == 255 && im2.pixel[k][l] == 255)
+                    {
+                        overlap++;
+                    }
+                }
+            }
+            if (overlap > 0)
+            {
+                nbPairsCommuns++;
+            }
+        }
+    }
+
+    // Compute the number of pairs in the ground truth image and in the processed image
+    nbPairsInRef = nbRegionsRef * nbRegionsRef;
+    nbPairsInTest = nbRegionsTest * nbRegionsTest;
+
+    // Compute the Vinet's measure
+    float precision = (float)nbPairsCommuns / (float)nbPairsInTest;
+    float recall = (float)nbPairsCommuns / (float)nbPairsInRef;
+
+    free(regionsRef);
+    free(regionsTest);
+
+    return (2 * precision * recall) / (precision + recall);
+}
+
+
 typedef struct
 {
 	int Nblig;
@@ -1184,6 +1336,203 @@ IMAGE ouvertureImage(IMAGE img, int voisinage)
 
 	inter = erosionImage(img, voisinage);
 	out = dilatationImage(inter, voisinage);
+	liberationImage(&inter);
+
+	return out;
+}
+
+STRUCTURE_ELEMENT strelDisk(int dim)
+{
+	STRUCTURE_ELEMENT se = allocationStructureElement(dim, dim);
+	int i, j;
+	int rayon = dim / 2;
+	int rayon2 = rayon * rayon;
+	int x, y;
+	for (i = 0; i < dim; i++)
+	{
+		for (j = 0; j < dim; j++)
+		{
+			x = i - rayon;
+			y = j - rayon;
+			if (x * x + y * y <= rayon2)
+			{
+				se.data[i][j] = 1;
+			}
+		}
+	}
+	return se;
+}
+
+STRUCTURE_ELEMENT strelSquare(int dim)
+{
+	STRUCTURE_ELEMENT se = allocationStructureElement(dim, dim);
+	int i, j;
+	for (i = 0; i < dim; i++)
+	{
+		for (j = 0; j < dim; j++)
+		{
+			se.data[i][j] = 1;
+		}
+	}
+	return se;
+}
+
+STRUCTURE_ELEMENT strelLine(int dim)
+{
+	STRUCTURE_ELEMENT se = allocationStructureElement(dim, dim);
+	int i, j;
+	for (i = 0; i < dim; i++)
+	{
+		for (j = 0; j < dim; j++)
+		{
+			se.data[i][j] = 1;
+		}
+	}
+	return se;
+}
+
+STRUCTURE_ELEMENT strel(char *nom, int dim1)
+{
+	if (strcmp(nom, "disk") == 0)
+	{
+		return strelDisk(dim1);
+	}
+	else if (strcmp(nom, "square") == 0)
+	{
+		return strelSquare(dim1);
+	}
+	else if (strcmp(nom, "line") == 0)
+	{
+		return strelLine(dim1);
+	}
+	else
+	{
+		printf("Erreur : strel() : nom de structure element inconnu\n");
+		exit(1);
+	}
+}
+
+STRUCTURE_ELEMENT allocationStructureElement(int Nblig, int Nbcol)
+{
+	STRUCTURE_ELEMENT se = { 0,0,NULL };
+	int i;
+
+	se.Nblig = Nblig;
+	se.Nbcol = Nbcol;
+	se.data = (int**)malloc(se.Nblig * sizeof(int*));
+	for (i = 0; i < se.Nblig; i++)
+	{
+		se.data[i] = (int*)malloc(se.Nbcol * sizeof(int));
+	}
+	return se;
+}
+
+void liberationStructureElement(STRUCTURE_ELEMENT *se)
+{
+	int i;
+
+	for (i = 0; i < se->Nblig; i++)
+	{
+		free(se->data[i]);
+	}
+	free(se->data);
+	se->Nblig = 0;
+	se->Nbcol = 0;	
+}
+
+int dilatationPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se)
+{
+	int k, l, max = 0;
+
+	for (k = 0; k < se.Nblig; k++)
+	{
+		for (l = 0; l < se.Nbcol; l++)
+		{
+			if (se.data[k][l] == 1)
+			{
+				if (img.pixel[i + k][j + l] > max)
+				{
+					max = img.pixel[i + k][j + l];
+				}
+			}
+		}
+	}
+	return max;
+}
+
+IMAGE dilatationImageSE(IMAGE img, STRUCTURE_ELEMENT se)
+{
+	IMAGE out = { 0,0,NULL,NULL };
+	int i, j;
+
+	out = allocationImage(img.Nblig, img.Nbcol);
+
+	for (i = 0; i < img.Nblig; i++)
+	{
+		for (j = 0; j < img.Nbcol; j++)
+		{
+			out.pixel[i][j] = dilatationPixel(img, i, j, se);
+		}
+	}
+	return out;
+}
+
+int erosionPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se)
+{
+	int k, l, min = 255;
+
+	for (k = 0; k < se.Nblig; k++)
+	{
+		for (l = 0; l < se.Nbcol; l++)
+		{
+			if (se.data[k][l] == 1)
+			{
+				if (img.pixel[i + k][j + l] < min)
+				{
+					min = img.pixel[i + k][j + l];
+				}
+			}
+		}
+	}
+	return min;
+}
+
+IMAGE erosionImageSE(IMAGE img, STRUCTURE_ELEMENT se)
+{
+	IMAGE out = { 0,0,NULL,NULL };
+	int i, j;
+
+	out = allocationImage(img.Nblig, img.Nbcol);
+
+	for (i = 0; i < img.Nblig; i++)
+	{
+		for (j = 0; j < img.Nbcol; j++)
+		{
+			out.pixel[i][j] = erosionPixel(img, i, j, se);
+		}
+	}
+	return out;
+}
+
+IMAGE ouvertureImageSE(IMAGE img, STRUCTURE_ELEMENT se)
+{
+	IMAGE out = { 0,0,NULL,NULL };
+	IMAGE inter = { 0,0,NULL,NULL };
+
+	inter = erosionImageSE(img, se);
+	out = dilatationImageSE(inter, se);
+	liberationImage(&inter);
+
+	return out;
+}
+
+IMAGE fermetureImageSE(IMAGE img, STRUCTURE_ELEMENT se)
+{
+	IMAGE out = { 0,0,NULL,NULL };
+	IMAGE inter = { 0,0,NULL,NULL };
+
+	inter = dilatationImageSE(img, se);
+	out = erosionImageSE(inter, se);
 	liberationImage(&inter);
 
 	return out;

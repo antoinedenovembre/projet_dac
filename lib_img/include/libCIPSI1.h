@@ -9,6 +9,20 @@ typedef struct image {
 	unsigned char** pixel;
 } IMAGE;
 
+typedef struct structureElement {
+	int   Nblig;
+	int   Nbcol;
+	int** data;
+} STRUCTURE_ELEMENT;
+
+typedef struct Region
+{
+    int x1;
+    int y1;
+    int x2;
+    int y2;
+} REGION;
+
 typedef struct rgb {
 	unsigned char R;
 	unsigned char G;
@@ -36,6 +50,12 @@ typedef struct signature_composantes_connexes {
 	float compacite;
 	int bord;
 } SIGNATURE_COMPOSANTE_CONNEXE;
+
+float scoreIOU(IMAGE im1, IMAGE im2);
+REGION* findRegions(IMAGE im, int* nbRegions);
+void expandRegion(IMAGE im, REGION* region);
+float computeOverlap(REGION r1, REGION r2);
+float scoreVinet(IMAGE im1, IMAGE im2);
 
 IMAGE allocationImage(int Nblig, int Nbcol);
 void initialisationAleatoireImage(IMAGE img, int ngMin, int ngMax);
@@ -73,5 +93,18 @@ IMAGE dilatationImage(IMAGE img, int voisinage);
 IMAGE erosionImage(IMAGE img, int voisinage);
 IMAGE ouvertureImage(IMAGE img, int voisinage);
 IMAGE fermetureImage(IMAGE img, int voisinage);
+
+STRUCTURE_ELEMENT strelDisk(int dim);
+STRUCTURE_ELEMENT strelSquare(int dim);
+STRUCTURE_ELEMENT strelLine(int dim);
+STRUCTURE_ELEMENT strel(char *nom, int dim1);
+STRUCTURE_ELEMENT allocationStructureElement(int Nblig, int Nbcol);
+void liberationStructureElement(STRUCTURE_ELEMENT *se);
+int dilatationPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se);
+IMAGE dilatationImageSE(IMAGE img, STRUCTURE_ELEMENT se);
+int erosionPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se);
+IMAGE erosionImageSE(IMAGE img, STRUCTURE_ELEMENT se);
+IMAGE ouvertureImageSE(IMAGE img, STRUCTURE_ELEMENT se);
+IMAGE fermetureImageSE(IMAGE img, STRUCTURE_ELEMENT se);
 
 char* lectureString(int taille);
