@@ -7,7 +7,7 @@
 #include <string.h>
 #include <math.h>
 
-#include "libCIPSI1.h"
+#include "../include/libCIPSI1.h"
 
 /* static -> non extern */
 
@@ -1189,9 +1189,7 @@ IMAGE ouvertureImage(IMAGE img, int voisinage)
 	return out;
 }
 
-
-
-char* EcritureChaineCaracteres(int taille)
+char* lectureString(int taille)
 {
 	char* mot;
 	mot = (char*)malloc(taille * sizeof(char));
@@ -1200,13 +1198,3 @@ char* EcritureChaineCaracteres(int taille)
 
 	return mot;
 }
-
-
-
-LectureChaineCaracteres(char * mot) 
-{
-	printf("%s", mot);
-	printf("\n");
-	
-}
-

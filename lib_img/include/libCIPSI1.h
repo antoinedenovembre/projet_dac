@@ -74,6 +74,4 @@ IMAGE erosionImage(IMAGE img, int voisinage);
 IMAGE ouvertureImage(IMAGE img, int voisinage);
 IMAGE fermetureImage(IMAGE img, int voisinage);
 
-
-char* EcritureChaineCaracteres(int taille);
-LectureChaineCaracteres(char* mot);
+char* lectureString(int taille);
