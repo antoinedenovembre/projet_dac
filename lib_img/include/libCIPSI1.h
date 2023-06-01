@@ -100,6 +100,8 @@ STRUCTURE_ELEMENT strelLine(int dim);
 STRUCTURE_ELEMENT strel(char *nom, int dim1);
 STRUCTURE_ELEMENT allocationStructureElement(int Nblig, int Nbcol);
 void liberationStructureElement(STRUCTURE_ELEMENT *se);
+
+IMAGE filtreMed(IMAGE img, int dim);
 int dilatationPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se);
 IMAGE dilatationImageSE(IMAGE img, STRUCTURE_ELEMENT se);
 int erosionPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se);

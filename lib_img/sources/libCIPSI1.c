@@ -1427,6 +1427,48 @@ void liberationStructureElement(STRUCTURE_ELEMENT *se)
 	se->Nbcol = 0;	
 }
 
+IMAGE filtreMed(IMAGE img, int dim)
+{
+	STRUCTURE_ELEMENT se = strel("disk", dim);
+	IMAGE out = { 0,0,NULL,NULL };
+
+	out = allocationImage(img.Nblig, img.Nbcol);
+
+	int i, j, k, l, min, max, mediane;
+
+	for (i = 0; i < img.Nblig; i++)
+	{
+		for (j = 0; j < img.Nbcol; j++)
+		{
+			min = 255;
+			max = 0;
+			mediane = 0;
+			for (k = 0; k < se.Nblig; k++)
+			{
+				for (l = 0; l < se.Nbcol; l++)
+				{
+					if (se.data[k][l] == 1)
+					{
+						if (img.pixel[i + k][j + l] < min)
+						{
+							min = img.pixel[i + k][j + l];
+						}
+						if (img.pixel[i + k][j + l] > max)
+						{
+							max = img.pixel[i + k][j + l];
+						}
+					}
+				}
+			}
+			mediane = (min + max) / 2;
+			out.pixel[i][j] = mediane;
+		}
+	}
+
+	liberationStructureElement(&se);
+	return out;
+}
+
 int dilatationPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se)
 {
 	int k, l, max = 0;
