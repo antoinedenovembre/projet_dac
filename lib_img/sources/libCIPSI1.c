@@ -1596,3 +1596,62 @@ char* lectureString(int taille)
 
 	return mot;
 }
+
+
+
+IMAGE blackTopHat(IMAGE img, STRUCTURE_ELEMENT se)
+{
+	// Effectuer une ouverture morphologique
+	IMAGE opened_image = ouvertureImageSE(img, se);
+
+	// Effectuer une érosion morphologique
+	IMAGE eroded_image = erosionImageSE(img, se);
+
+	// Calculer la différence entre l'image d'origine et l'image érodée
+
+	IMAGE black_tophat = allocationImage(img.Nblig, img.Nbcol);
+
+	for (int i = 0; i < img.Nblig; i++)
+	{
+		for (int j = 0; j < img.Nbcol; j++)
+		{
+			black_tophat.pixel[i][j] = img.pixel[i][j] - eroded_image.pixel[i][j];
+		}
+
+		// Libérer la mémoire des images temporaires
+		freeImage(opened_image);
+		freeImage(eroded_image);
+
+		// Retourner l'image Black Top-Hat
+		return black_tophat;
+	}
+}
+
+
+IMAGE whiteTopHat(IMAGE img, STRUCTURE_ELEMENT se)
+{
+	// Effectuer une fermeture morphologique
+	IMAGE closed_image = fermetureImageSE(img, se);
+
+	// Effectuer une dilatation morphologique
+	IMAGE dilated_image = dilatationImageSE(img, se);
+
+	// Calculer la différence entre l'image d'origine et l'image érodée
+
+	IMAGE white_tophat = allocationImage(img.Nblig, img.Nbcol);
+
+	for (int i = 0; i < img.Nblig; i++)
+	{
+		for (int j = 0; j < img.Nbcol; j++)
+		{
+			white_tophat.pixel[i][j] = img.pixel[i][j] - dilated_image.pixel[i][j];
+		}
+
+		// Libérer la mémoire des images temporaires
+		freeImage(closed_image);
+		freeImage(dilated_image);
+
+		// Retourner l'image White Top-Hat
+		return white_tophat;
+	}
+}

@@ -1,2 +1,8 @@
-﻿  main.c
-  Projet_dac.vcxproj -> C:\Users\doria\Documents\A_TELECOM\IPSI\IPSI1\Projet Développement d'Image\projet_dac\Projet_dac\x64\Debug\Projet_dac.exe
+﻿  libCIPSI1.c
+C:\Users\doria\Documents\A_TELECOM\IPSI\IPSI1\Projet Développement d Image\projet_dac\lib_img\sources\libCIPSI1.c(89,17): warning C4013: 'MAX' non défini(e) ; extern retournant int pris par défaut
+C:\Users\doria\Documents\A_TELECOM\IPSI\IPSI1\Projet Développement d Image\projet_dac\lib_img\sources\libCIPSI1.c(91,17): warning C4013: 'MIN' non défini(e) ; extern retournant int pris par défaut
+C:\Users\doria\Documents\A_TELECOM\IPSI\IPSI1\Projet Développement d Image\projet_dac\lib_img\sources\libCIPSI1.c(113,15): warning C4101: 'k' : variable locale non référencée
+C:\Users\doria\Documents\A_TELECOM\IPSI\IPSI1\Projet Développement d Image\projet_dac\lib_img\sources\libCIPSI1.c(113,18): warning C4101: 'l' : variable locale non référencée
+  main.c
+C:\Users\doria\Documents\A_TELECOM\IPSI\IPSI1\Projet Développement d Image\projet_dac\sources\main.c(1,10): fatal error C1083: Impossible d'ouvrir le fichier include : 'dirent.h' : No such file or directory
+  Génération de code en cours...

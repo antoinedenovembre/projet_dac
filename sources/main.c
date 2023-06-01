@@ -1,4 +1,4 @@
-#include <dirent.h>
+#include 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,4 +72,80 @@ int main(void)
 	}
 
 	return EXIT_SUCCESS;
+
+
+    const char* source_dir = "images/Source Images/";
+    const char* gt_dir = "images/Ground Truth/";
+
+    // Récupérer la liste de tous les fichiers .pgm dans le répertoire source
+    IMAGE* source_files = NULL;
+    int num_source_files = 0;
+    source_files = listFiles(source_dir, ".pgm", &num_source_files);
+
+    // Calculer le score de Jaccard pour chaque image et afficher le score moyen
+    float* scores = (float*)calloc(num_source_files, sizeof(float));
+    for (int i = 0; i < num_source_files; i++)
+    {
+        const char* source_name = source_files[i].data;
+        const char* source_path = concatenatePaths(source_dir, source_name);
+
+        const char* gt_name = source_name;
+        const char* gt_path = concatenatePaths(gt_dir, gt_name);
+
+        // Lire l'image source et appliquer un filtre médian
+        IMAGE source = lectureImage(source_path);
+        IMAGE source_filtered = filtreMed(source, 4, 4);
+
+        // Lire l'image ground truth et la binariser
+        IMAGE gt = lectureImage(gt_path);
+        IMAGE gt_binarized = seuillageOtsu(gt);
+
+        // Effectuer une opération top-hat morphologique
+        STRUCTURE_ELEMENT se = strelDisk(15);
+        IMAGE source_tophat;
+        const char* top_hat_operation;
+        if (strncmp(source_name, "In", 2) == 0) {
+            // Top-hat noir pour les images négatives
+            top_hat_operation = "Top-Hat Noir";
+            source_tophat = blackTopHat(source_filtered, se);
+        }
+        else if (strncmp(source_name, "Sc", 2) == 0) {
+            // Top-hat blanc pour les images positives
+            top_hat_operation = "Top-Hat Blanc";
+            source_tophat = whiteTopHat(source_filtered, se);
+        }
+        else {
+            printf("Nom d'image invalide : %s\n", source_name);
+            continue;
+        }
+
+
+        // Améliorer le contraste et binariser l'image top-hat en utilisant la méthode d'Otsu
+        IMAGE source_tophat_contrast = expansionImage(source_tophat, 0, 255);
+        IMAGE source_tophat_binarized = seuillageOtsu(source_tophat_contrast);
+
+        // Définir le seuil de surface
+        int area_threshold = 200;
+
+        // Supprimer les petites composantes connexes de l'image binaire
+        IMAGE source_tophat_binarized_clean = delSmallCompImage(source_tophat_binarized, area_threshold);
+
+        // Calculer le score de IoU et l'ajouter à la liste des scores
+
+        float score_IOU = scoreIOU(source_tophat_binarized_clean, gt_binarized);
+        printf("score IOU = %f\n", score_IOU);
+
+
+        // Libérer la mémoire
+        freeImage(source);
+        freeImage(source_filtered);
+        freeImage(gt);
+        freeImage(gt_binarized);
+        freeImage(source_tophat);
+        freeImage(source_tophat_contrast);
+        freeImage(source_tophat_binarized);
+        freeImage(source_tophat_binarized_clean);
+    }
+
+
 }

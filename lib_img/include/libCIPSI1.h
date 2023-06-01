@@ -111,3 +111,5 @@ IMAGE ouvertureImageSE(IMAGE img, STRUCTURE_ELEMENT se);
 IMAGE fermetureImageSE(IMAGE img, STRUCTURE_ELEMENT se);
 
 char* lectureString(int taille);
+IMAGE blackTopHat(IMAGE img, STRUCTURE_ELEMENT se);
+IMAGE whiteTopHat(IMAGE img, STRUCTURE_ELEMENT se);
