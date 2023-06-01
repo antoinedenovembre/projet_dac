@@ -93,6 +93,7 @@ IMAGE dilatationImage(IMAGE img, int voisinage);
 IMAGE erosionImage(IMAGE img, int voisinage);
 IMAGE ouvertureImage(IMAGE img, int voisinage);
 IMAGE fermetureImage(IMAGE img, int voisinage);
+IMAGE delSmallCompImage(IMAGE img, int taille);
 
 STRUCTURE_ELEMENT strelDisk(int dim);
 STRUCTURE_ELEMENT strelSquare(int dim);

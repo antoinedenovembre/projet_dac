@@ -1328,6 +1328,26 @@ IMAGE ouvertureImage(IMAGE img, int voisinage)
 	return out;
 }
 
+IMAGE delSmallCompImage(IMAGE img, int taille)
+{
+	SIGNATURE_COMPOSANTE_CONNEXE *sign = NULL;
+	IMAGE out = { 0,0,NULL,NULL };
+	int i, j, k, l, m, n, nbComp, nbPix;
+
+	sign = signatureComposanteConnexeImage(img, &nbComp);
+
+	for (i = 0; i < nbComp; i++)
+	{
+		if (sign[i].surface < taille)
+		{
+			for (j = 0; j < img.Nbcol * img.Nblig; j++)
+			{
+				img.data[j] = (img.data[j] == i) ? 0 : img.data[j];
+			}
+		}
+	}
+}
+
 STRUCTURE_ELEMENT strelDisk(int dim)
 {
 	STRUCTURE_ELEMENT se = allocationStructureElement(dim, dim);
