@@ -1,4 +1,3 @@
-#include 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,144 +7,127 @@
 void menu(void)
 {
 	printf("Quelle option choisissez-vous ?\n\n");
-	printf("\t1 - Vous souhaitez traiter l'ensemble des images.\n");
-	printf("\t2 - Vous souhaitez traiter une image en particulier.\n");
+	printf("\t1 - Traiter l'ensemble des images\n");
+	printf("\t2 - Traiter une image en particulier\n");
+	printf("\t3 - Quitter\n");
 	printf("\nChoix : ");
+}
+
+void imageProcessing(char * name, int * iou, int * vinet)
+{
+	printf("Traitement de l'image %s\n", name);
+
+	char src_path[200];
+	strcpy(src_path, "images/Source Images/");
+	strcat(src_path, name);
+
+	char gt_path[200];
+	strcpy(gt_path, "images/Ground Truth/");
+	strcat(gt_path, name);
+
+	IMAGE src = lectureImage(src_path);
+	IMAGE src_filtered = filtreMed(src, 4);
+
+	IMAGE gt = lectureImage(gt_path);
+	IMAGE gt_binarized = seuillageOtsu(gt);
+
+	STRUCTURE_ELEMENT se = strelDisk(15);
+	IMAGE src_tophat;
+	if (strncmp(name, "In", 2) == 0) {
+		src_tophat = blackTopHat(src_filtered, se);
+	}
+	else if (strncmp(name, "Sc", 2) == 0) {
+		src_tophat = whiteTopHat(src_filtered, se);
+	}
+	else {
+		printf("Nom d'image invalide : %s\n", name);
+		return;
+	}
+
+	// Améliorer le contraste et binariser l'image top-hat en utilisant la méthode d'Otsu
+	IMAGE src_tophat_contrast = expansionImage(src_tophat, 0, 255);
+	IMAGE src_tophat_binarized = seuillageOtsu(src_tophat_contrast);
+
+	float score_IOU = scoreIOU(src_tophat_binarized, gt_binarized);
+	*iou = (int) (score_IOU * 100);
+
+	// Calculer le score de Vinet
+	float score_Vinet = scoreVinet(src_tophat_binarized, gt_binarized);
+	*vinet = (int) (score_Vinet * 100);
+
+	// Libérer la mémoire
+	liberationImage(&src);
+	liberationImage(&src_filtered);
+	liberationImage(&gt);
+	liberationImage(&gt_binarized);
+	liberationImage(&src_tophat);
+	liberationImage(&src_tophat_contrast);
+	liberationImage(&src_tophat_binarized);
 }
 
 int main(void)
 {
-	int choix;
-	char sourceDir[200] = "../images/Source Images/";
-	char gtDir[200] = "../images/Ground Truth/";
-	char* fileName = "";
+	int choix = 0;
 	
-	menu();
-	scanf("%d", &choix);
-
-	switch (choix)
+	while (choix != 3)
 	{
-		case 1:
-			printf("\nNous allons traiter l'ensemble des images\n");
+		menu();
+		scanf("%d", &choix);
 
-            // Ouvrir le dossier contenant les images source
-            DIR *dir;
-            struct dirent *ent;
-            if ((dir = opendir(sourceDir)) != NULL) {
-                /* parcourir tous les fichiers et répertoires dans le dossier */
-                while ((ent = readdir(dir)) != NULL) {
-                    if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0) {
-                        continue;
-                    }
-                    // Générer le chemin complet de l'image source
-                    char filePath[200];
-                    strcpy(filePath, sourceDir);
-                    strcat(filePath, ent->d_name);
-                    printf("Traitement de l'image %s ...\n", filePath);
+		switch (choix)
+		{
+			case 1:
+				printf("\nTraitement de l'ensemble des images\n");
 
-                    // Charger l'image source
-                    IMAGE img = {0, 0, NULL, NULL};
-                    img = lectureImage(filePath);
+				int sum_iou = 0;
+				int sum_vinet = 0;
 
-                    // TODO : Traiter l'image
+				for (int i = 1; i <= 300; i++) {
+					int iou = 0, vinet = 0;
+					
+					char in[11] = "In_";
+					char sc[11] = "Sc_";
+					char num[10];
+					sprintf(num, "%d", i);
+					strcat(in, num);
+					strcat(sc, num);
+					strcat(in, ".pgm");
+					strcat(sc, ".pgm");
 
-                    // Libérer la mémoire
-                    liberationImage(&img);
+					imageProcessing(sc, &iou, &vinet);
+
+					sum_iou += iou;
+					sum_vinet += vinet;
+
+					imageProcessing(in, &iou, &vinet);
+
+					sum_iou += iou;
+					sum_vinet += vinet;
 				}
-			}
-		case 2:
-			printf("\nQuelle image souhaitez-vous traiter ? \nEntrez le nom de l'image (exemple : In_1.pgm)\t: ");
-            fileName = lectureString(10);
 
-            strcat(sourceDir, fileName);
+				printf("Score IOU moyen : %d%%\n", sum_iou / 600);
+				printf("Score Vinet moyen : %d%%\n\n[Retour au menu]\n", sum_vinet / 600);
+				break;
+			case 2:
+				printf("\nQuelle image souhaitez-vous traiter ? \nEntrez le nom de l'image (exemple : In_1.pgm)\t: ");
+				
+				char * fileName = lectureString(10);
 
-            // Charger l'image source
-            IMAGE img = {0, 0, NULL, NULL};
-            img = lectureImage(sourceDir);
+				int iou, vinet;
 
-            // TODO : Traiter l'image
+				imageProcessing(fileName, &iou, &vinet);
 
-            // Libérer la mémoire
-            liberationImage(&img);
-		default:
-			printf("\nErreur de saisie.\n");
+				printf("Score IOU : %d%%\n", iou);
+				printf("Score Vinet : %d%%\n\n[Retour au menu]\n", vinet);
+				break;
+			case 3:
+				break;
+			default:
+				printf("\nChoix invalide\n");
+				break;
+		}
 	}
+	printf("\nArret du programme\n");
 
 	return EXIT_SUCCESS;
-
-
-    const char* source_dir = "images/Source Images/";
-    const char* gt_dir = "images/Ground Truth/";
-
-    // Récupérer la liste de tous les fichiers .pgm dans le répertoire source
-    IMAGE* source_files = NULL;
-    int num_source_files = 0;
-    source_files = listFiles(source_dir, ".pgm", &num_source_files);
-
-    // Calculer le score de Jaccard pour chaque image et afficher le score moyen
-    float* scores = (float*)calloc(num_source_files, sizeof(float));
-    for (int i = 0; i < num_source_files; i++)
-    {
-        const char* source_name = source_files[i].data;
-        const char* source_path = concatenatePaths(source_dir, source_name);
-
-        const char* gt_name = source_name;
-        const char* gt_path = concatenatePaths(gt_dir, gt_name);
-
-        // Lire l'image source et appliquer un filtre médian
-        IMAGE source = lectureImage(source_path);
-        IMAGE source_filtered = filtreMed(source, 4, 4);
-
-        // Lire l'image ground truth et la binariser
-        IMAGE gt = lectureImage(gt_path);
-        IMAGE gt_binarized = seuillageOtsu(gt);
-
-        // Effectuer une opération top-hat morphologique
-        STRUCTURE_ELEMENT se = strelDisk(15);
-        IMAGE source_tophat;
-        const char* top_hat_operation;
-        if (strncmp(source_name, "In", 2) == 0) {
-            // Top-hat noir pour les images négatives
-            top_hat_operation = "Top-Hat Noir";
-            source_tophat = blackTopHat(source_filtered, se);
-        }
-        else if (strncmp(source_name, "Sc", 2) == 0) {
-            // Top-hat blanc pour les images positives
-            top_hat_operation = "Top-Hat Blanc";
-            source_tophat = whiteTopHat(source_filtered, se);
-        }
-        else {
-            printf("Nom d'image invalide : %s\n", source_name);
-            continue;
-        }
-
-
-        // Améliorer le contraste et binariser l'image top-hat en utilisant la méthode d'Otsu
-        IMAGE source_tophat_contrast = expansionImage(source_tophat, 0, 255);
-        IMAGE source_tophat_binarized = seuillageOtsu(source_tophat_contrast);
-
-        // Définir le seuil de surface
-        int area_threshold = 200;
-
-        // Supprimer les petites composantes connexes de l'image binaire
-        IMAGE source_tophat_binarized_clean = delSmallCompImage(source_tophat_binarized, area_threshold);
-
-        // Calculer le score de IoU et l'ajouter à la liste des scores
-
-        float score_IOU = scoreIOU(source_tophat_binarized_clean, gt_binarized);
-        printf("score IOU = %f\n", score_IOU);
-
-
-        // Libérer la mémoire
-        freeImage(source);
-        freeImage(source_filtered);
-        freeImage(gt);
-        freeImage(gt_binarized);
-        freeImage(source_tophat);
-        freeImage(source_tophat_contrast);
-        freeImage(source_tophat_binarized);
-        freeImage(source_tophat_binarized_clean);
-    }
-
-
 }

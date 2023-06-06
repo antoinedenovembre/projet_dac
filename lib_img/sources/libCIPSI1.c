@@ -1,15 +1,26 @@
 // libCIPSI1.c
 // Hubert Konik - filire IPSI
 
-#pragma once
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
 
+#include <signal.h>
+
 #include "../include/libCIPSI1.h"
 
 /* static -> non extern */
+
+int min(int a, int b)
+{
+	return (a < b) ? a : b;
+}
+
+int max(int a, int b)
+{
+	return (a > b) ? a : b;
+}
 
 float scoreIOU(IMAGE im1, IMAGE im2)
 {
@@ -28,126 +39,174 @@ float scoreIOU(IMAGE im1, IMAGE im2)
 	return((float)nbPixelsCommuns / (float)nbPixelsUnion);
 }
 
-// Vinet too many functions, see later
-
-REGION* findRegions(IMAGE im, int* nbRegions)
+float scoreVinet(IMAGE test, IMAGE refc)
 {
-    // Allocate memory for the maximum possible number of regions
-    int maxNbRegions = (im.Nblig * im.Nbcol) / 4;
-    REGION* regions = malloc(maxNbRegions * sizeof(REGION));
+	int nt =0, nr=0, nm = 0;
 
-    // Find all regions in the image
-    *nbRegions = 0;
-    int i, j;
-    for (i = 0; i < im.Nblig; i++)
-    {
-        for (j = 0; j < im.Nbcol; j++)
-        {
-            if (im.pixel[i][j] == 255)
-            {
-                // Expand the current region until it covers all adjacent pixels
-                REGION region = {j, i, j, i};
-                expandRegion(im, &region);
-                regions[*nbRegions] = region;
-                (*nbRegions)++;
+	SIGNATURE_COMPOSANTE_CONNEXE* st = signaturesImage(labelImage(test, &nt), nt);
+	SIGNATURE_COMPOSANTE_CONNEXE* sr = signaturesImage(labelImage(refc, &nr), nr);
+
+	nm = min(nt, nr);
+	float totalArea = 0;
+	float score = 0;
+
+	for (int i = 1; i < nm; i++) {
+		SIGNATURE_COMPOSANTE_CONNEXE* bestchoice = &(sr[1]);
+		float minDis = distanceSQ(st[i].CG, bestchoice->CG);
+
+		for (int j = 2; (j < nm) && (belongTo(bestchoice->CG, st[i].region) != 0); j++) {
+			if (distanceSQ(st[i].CG, sr[j].CG) < minDis) {
+				bestchoice = &(sr[j]);
+				minDis = distanceSQ(st[i].CG, bestchoice->CG);
+			}
+		}
+		int minX = min(st[i].region.x, bestchoice->region.x);
+		int minY = min(st[i].region.y, bestchoice->region.y);
+		int maxX = max(st[i].region.x + st[i].region.width, bestchoice->region.x + bestchoice->region.width);
+		int maxY = max(st[i].region.y + st[i].region.height, bestchoice->region.y + bestchoice->region.height);
+		REGION compareRegion = { minX, minY, maxX - minX, maxY - minY };
+
+		totalArea += compareRegion.height * compareRegion.width;
+		score += (compareRegion.height * compareRegion.width)*localIOU(test, refc, compareRegion);
+	}
+
+	if (nt < nr) {
+		for (int i = nt; i < nr; i++) {
+			totalArea += sr[i].region.height * sr[i].region.width;
+		}
+	}
+	else if (nt > nr) {
+		for (int i = nr; i < nt; i++) {
+			totalArea += st[i].region.height * st[i].region.width;
+		}
+	}
+
+    if (totalArea != 0) {
+        score /= totalArea;
+    } else {
+        score = 0;
+    }
+
+	return score;
+}
+
+float distanceSQ(POINT p1, POINT p2) 
+{
+	return (p1.x - p2.x) * (p1.x - p2.x) + (p1.y - p2.y) * (p1.y - p2.y);
+}
+
+char belongTo(POINT p, REGION reg) 
+{
+	if (p.x > reg.x && p.y > reg.y && p.x < reg.x + reg.width && p.y < reg.y + reg.height) {
+		return 1;
+	}
+	return 0;
+};
+
+void applicateurLUTRef(IMAGE* img, int* LUT) 
+{
+	for (int k = 0; k < img->Nbcol * img->Nblig; k++)
+		img->data[k] = LUT[img->data[k]];
+}
+
+IMAGE differenceImage(IMAGE im1, IMAGE im2)
+{
+	IMAGE res = allocationImage(im1.Nblig, im1.Nbcol);
+	for (int i = 0; i < im1.Nblig; i++)
+		for (int j = 0; j < im1.Nbcol; j++)
+			res.pixel[i][j] = (im1.pixel[i][j] == im2.pixel[i][j]) ? 0 : 255;
+	return res;
+}
+
+SIGNATURE_COMPOSANTE_CONNEXE* signaturesImage(IMAGE img, int nbComp) 
+{
+	SIGNATURE_COMPOSANTE_CONNEXE* sign = (SIGNATURE_COMPOSANTE_CONNEXE*)malloc((nbComp+1) * sizeof(SIGNATURE_COMPOSANTE_CONNEXE));
+	int* LUTBords = (int*)malloc((nbComp + 1)* sizeof(int));
+	
+	for (int i = 0; i < nbComp+1; i++) {
+		LUTBords[i] = i;
+		sign[i].bord = 0;
+		sign[i].perimetre = 0;
+		sign[i].surface = 0;
+		sign[i].CG.x = 0;
+		sign[i].CG.y = 0;
+		sign[i].region.x = img.Nblig;
+		sign[i].region.y = img.Nbcol;
+		sign[i].region.width = 0;
+		sign[i].region.height = 0;
+        sign[i].compacite = 0;
+	}
+	
+	IMAGE er = erosionImage(img, 4);
+	IMAGE cnt = differenceImage(img, er);
+
+	int i = 0;
+	int j = 0;
+
+	for (int k = 0; k < img.Nbcol * img.Nblig; k++) 
+	{
+		sign[img.data[k]].surface++;
+		int i = k % img.Nbcol;
+		int j = k / img.Nblig;
+		sign[img.data[k]].CG.x += i;
+		sign[img.data[k]].CG.y += j;
+		sign[img.data[k]].region.x = min(i, sign[img.data[k]].region.x);
+		sign[img.data[k]].region.y = min(j, sign[img.data[k]].region.y);
+		sign[img.data[k]].region.width = max(i, sign[img.data[k]].region.width);
+		sign[img.data[k]].region.height = max(j, sign[img.data[k]].region.height);
+	}
+	for (int i = 1; i < nbComp + 1; i++) 
+	{
+		sign[i].compacite = pow(sign[i].perimetre, 2) / (4 * 3.14f * sign[i].surface);
+		sign[i].rayon = sqrt(sign[i].surface) / 3.14f;
+		sign[i].CG.x /= sign[i].surface;
+		sign[i].CG.y /= sign[i].surface;
+	}
+
+	for (int k = 0; k < img.Nbcol; k++) 
+	{
+		sign[img.pixel[k][0]].bord++;
+		sign[img.pixel[k][img.Nbcol - 1]].bord++;
+	}
+	for(int k = 0; k < img.Nblig; k++) 
+	{
+		sign[img.pixel[0][k]].bord++;
+		sign[img.pixel[img.Nblig - 1][k]].bord++;
+	}
+
+	for (int i = 1; i < nbComp + 1; i++) 
+	{
+		if ((sign[i].bord > img.Nbcol*0.9) || (sign[i].bord > img.Nblig*0.9)) {
+			LUTBords[i] = 0;
+		}
+	}
+
+	applicateurLUTRef(&img, LUTBords);
+
+	return sign;
+}
+
+float localIOU(IMAGE test, IMAGE ref, REGION reg)
+{
+	int minX = max(reg.x, 0);
+    int minY = max(reg.y, 0);
+    int maxX = min(reg.x + reg.width, test.Nbcol);
+    int maxY = min(reg.y + reg.height, test.Nblig);
+
+    int intersection = 0;
+    int unionArea = 0;
+
+    for (int i = minX; i < maxX; i++) {
+        for (int j = minY; j < maxY; j++) {
+            if (test.pixel[j][i] != 0 && ref.pixel[j][i] != 0) {
+                intersection++;
+            }
+            if (test.pixel[j][i] != 0 || ref.pixel[j][i] != 0) {
+                unionArea++;
             }
         }
     }
-
-    // Trim the excess memory used for the regions array
-    regions = realloc(regions, (*nbRegions) * sizeof(REGION));
-
-    return regions;
-}
-
-void expandRegion(IMAGE im, REGION* region)
-{
-    int x, y;
-    for (x = region->x1; x <= region->x2; x++)
-    {
-        for (y = region->y1; y <= region->y2; y++)
-        {
-            if (im.pixel[y][x] == 255)
-            {
-                // Expand the region horizontally
-                if (x < region->x1) region->x1 = x;
-                if (x > region->x2) region->x2 = x;
-                // Expand the region vertically
-                if (y < region->y1) region->y1 = y;
-                if (y > region->y2) region->y2 = y;
-                // Clear the pixel to avoid revisiting it
-                im.pixel[y][x] = 0;
-                // Recursively expand the adjacent pixels
-                expandRegion(im, region);
-            }
-        }
-    }
-}
-
-float computeOverlap(REGION r1, REGION r2)
-{
-    int x1 = MAX(r1.x1, r2.x1);
-    int y1 = MAX(r1.y1, r2.y1);
-    int x2 = MIN(r1.x2, r2.x2);
-    int y2 = MIN(r1.y2, r2.y2);
-
-    if (x1 > x2 || y1 > y2)
-    {
-        // The regions do not overlap
-        return 0.0f;
-    }
-    else
-    {
-        // Compute the overlap score
-        int nbPixelsIntersection = (x2 - x1 + 1) * (y2 - y1 + 1);
-        int nbPixelsUnion = (r1.x2 - r1.x1 + 1) * (r1.y2 - r1.y1 + 1) +
-                            (r2.x2 - r2.x1 + 1) * (r2.y2 - r2.y1 + 1) -
-                            nbPixelsIntersection;
-        return (float)nbPixelsIntersection / (float)nbPixelsUnion;
-    }
-}
-
-
-float scoreVinet(IMAGE im1, IMAGE im2)
-{
-    int i, j, k, l;
-    int nbPairsCommuns = 0;
-    int nbPairsInRef = 0;
-    int nbPairsInTest = 0;
-
-    // Find all pairs of regions in the ground truth image
-    int nbRegionsRef = 0;
-    REGION *regionsRef = findRegions(im1, &nbRegionsRef);
-
-    // Find all pairs of regions in the processed image
-    int nbRegionsTest = 0;
-    REGION *regionsTest = findRegions(im2, &nbRegionsTest);
-
-    // Compute the overlap score for each pair of regions
-    for (i = 0; i < nbRegionsRef; i++)
-    {
-        for (j = 0; j < nbRegionsTest; j++)
-        {
-            float overlap = computeOverlap(regionsRef[i], regionsTest[j]);
-            if (overlap > 0)
-            {
-                nbPairsCommuns++;
-            }
-        }
-    }
-
-    // Compute the number of pairs in the ground truth image and in the processed image
-    nbPairsInRef = nbRegionsRef * nbRegionsRef;
-    nbPairsInTest = nbRegionsTest * nbRegionsTest;
-
-    // Compute the Vinet's measure
-    float precision = (float)nbPairsCommuns / (float)nbPairsInTest;
-    float recall = (float)nbPairsCommuns / (float)nbPairsInRef;
-
-    free(regionsRef);
-    free(regionsTest);
-
-    return (2 * precision * recall) / (precision + recall);
+    return (float)intersection / unionArea;
 }
 
 typedef struct
@@ -251,7 +310,7 @@ IMAGE lectureImage(const char *in)
 
 	if ((F = fopen(in, "r")) == NULL)
 	{
-		printf("Pb image inexistante");
+		printf("Pb image inexistante\n");
 	}
 	else
 	{
@@ -309,7 +368,7 @@ IMAGE lectureImage(const char *in)
 
 			/* d�but des data */
 
-			printf("Lecture image NG type %s avec %d lignes et %d colonnes...\n", type, img.Nblig, img.Nbcol);
+			// printf("Lecture image NG type %s avec %d lignes et %d colonnes...\n", type, img.Nblig, img.Nbcol);
 
 			/* taille connue, allocation dynamique possible */
 			img = allocationImage(img.Nblig, img.Nbcol);
@@ -377,7 +436,7 @@ IMAGE lectureImage(const char *in)
 
 				/* d�but des data */
 
-				printf("Lecture image NG type %s avec %d lignes et %d colonnes...\n", type, img.Nblig, img.Nbcol);
+				// printf("Lecture image NG type %s avec %d lignes et %d colonnes...\n", type, img.Nblig, img.Nbcol);
 
 				/* taille connue, allocation dynamique possible */
 				img = allocationImage(img.Nblig, img.Nbcol);
@@ -1142,44 +1201,6 @@ IMAGERGB colorisationImage(IMAGE img, char *table)
 	return out;
 }
 
-SIGNATURE_COMPOSANTE_CONNEXE* signaturesImage(IMAGE label, int nbComp)
-{
-	SIGNATURE_COMPOSANTE_CONNEXE *sig = NULL;
-	IMAGE contours = { 0,0,NULL,NULL };
-	int i, j;
-
-	sig = (SIGNATURE_COMPOSANTE_CONNEXE*)calloc(nbComp + 1, sizeof(SIGNATURE_COMPOSANTE_CONNEXE)); /* 0 -> fond */
-
-	for (i = 0; i < label.Nbcol*label.Nblig; i++)
-		sig[label.data[i]].surface += 1;
-
-	contours = erosionImage(label, 4);
-
-	for (i = 0; i < label.Nbcol*label.Nblig; i++)
-		contours.data[i] = label.data[i] - contours.data[i];
-
-	for (i = 0; i < label.Nbcol*label.Nblig; i++)
-		sig[contours.data[i]].perimetre += 1;
-
-	for (i = 1; i <= nbComp; i++)
-		sig[i].compacite = (sig[i].perimetre*sig[i].perimetre) / (4 * (float)acos(-1) *sig[i].surface);
-
-	for (i = 0; i < label.Nblig; i++)
-	{
-		sig[label.pixel[i][0]].bord = 1;
-		sig[label.pixel[i][label.Nbcol - 1]].bord = 1;
-	}
-	for (j = 0; j < label.Nbcol; j++)
-	{
-		sig[label.pixel[0][j]].bord = 1;
-		sig[label.pixel[label.Nblig - 1][j]].bord = 1;
-	}
-
-	liberationImage(&contours);
-
-	return sig;
-}
-
 IMAGE erosionImage(IMAGE img, int voisinage)
 {
 	IMAGE out = { 0,0,NULL,NULL };
@@ -1331,10 +1352,12 @@ IMAGE ouvertureImage(IMAGE img, int voisinage)
 IMAGE delSmallCompImage(IMAGE img, int taille)
 {
 	SIGNATURE_COMPOSANTE_CONNEXE *sign = NULL;
-	IMAGE out = { 0,0,NULL,NULL };
+	IMAGE out = { 0,0,NULL,NULL }, label = { 0,0,NULL,NULL };
 	int i, j, k, l, m, n, nbComp, nbPix;
 
-	sign = signatureComposanteConnexeImage(img, &nbComp);
+	out = allocationImage(img.Nblig, img.Nbcol);
+	label = labelImage(img, &nbComp);
+	sign = signaturesImage(img, nbComp);
 
 	for (i = 0; i < nbComp; i++)
 	{
@@ -1342,10 +1365,15 @@ IMAGE delSmallCompImage(IMAGE img, int taille)
 		{
 			for (j = 0; j < img.Nbcol * img.Nblig; j++)
 			{
-				img.data[j] = (img.data[j] == i) ? 0 : img.data[j];
+				out.data[j] = (img.data[j] == i) ? 0 : img.data[j];
 			}
 		}
 	}
+
+	liberationImage(&label);
+	free(sign);
+
+	return out;
 }
 
 STRUCTURE_ELEMENT strelDisk(int dim)
@@ -1355,6 +1383,7 @@ STRUCTURE_ELEMENT strelDisk(int dim)
 	int rayon = dim / 2;
 	int rayon2 = rayon * rayon;
 	int x, y;
+
 	for (i = 0; i < dim; i++)
 	{
 		for (j = 0; j < dim; j++)
@@ -1449,43 +1478,38 @@ void liberationStructureElement(STRUCTURE_ELEMENT *se)
 
 IMAGE filtreMed(IMAGE img, int dim)
 {
-	STRUCTURE_ELEMENT se = strel("disk", dim);
 	IMAGE out = { 0,0,NULL,NULL };
 
 	out = allocationImage(img.Nblig, img.Nbcol);
 
-	int i, j, k, l, min, max, mediane;
+	int i, j, k, l;
+	int * tab = (int*)malloc(dim * dim * sizeof(int));
 
 	for (i = 0; i < img.Nblig; i++)
 	{
 		for (j = 0; j < img.Nbcol; j++)
 		{
-			min = 255;
-			max = 0;
-			mediane = 0;
-			for (k = 0; k < se.Nblig; k++)
+			for (k = -dim; k < dim; k++)
 			{
-				for (l = 0; l < se.Nbcol; l++)
+				for (l = -dim; l < dim; l++)
 				{
-					if (se.data[k][l] == 1)
+					// Use relative coordinates to avoid out of bounds
+					if (i + k >= 0 && i + k < img.Nblig && j + l >= 0 && j + l < img.Nbcol)
 					{
-						if (img.pixel[i + k][j + l] < min)
-						{
-							min = img.pixel[i + k][j + l];
-						}
-						if (img.pixel[i + k][j + l] > max)
-						{
-							max = img.pixel[i + k][j + l];
-						}
+						tab[(k + dim) * dim + (l + dim)] = img.pixel[i + k][j + l];
 					}
 				}
 			}
-			mediane = (min + max) / 2;
-			out.pixel[i][j] = mediane;
+			out.pixel[i][j] = tab[dim * dim / 2];
+			// Empty the array
+			for (int m = 0; m < dim * dim; m++)
+			{
+				tab[m] = 0;
+			}
 		}
 	}
 
-	liberationStructureElement(&se);
+	free(tab);
 	return out;
 }
 
@@ -1497,11 +1521,15 @@ int dilatationPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se)
 	{
 		for (l = 0; l < se.Nbcol; l++)
 		{
-			if (se.data[k][l] == 1)
+			// Verify that the structure element is in the image
+			if (i + k >= 0 && i + k < img.Nblig && j + l >= 0 && j + l < img.Nbcol)
 			{
-				if (img.pixel[i + k][j + l] > max)
+				if (se.data[k][l] == 1)
 				{
-					max = img.pixel[i + k][j + l];
+					if (img.pixel[i + k][j + l] > max)
+					{
+						max = img.pixel[i + k][j + l];
+					}
 				}
 			}
 		}
@@ -1534,11 +1562,15 @@ int erosionPixel(IMAGE img, int i, int j, STRUCTURE_ELEMENT se)
 	{
 		for (l = 0; l < se.Nbcol; l++)
 		{
-			if (se.data[k][l] == 1)
+			// Verify that the structure element is in the image
+			if (i + k >= 0 && i + k < img.Nblig && j + l >= 0 && j + l < img.Nbcol)
 			{
-				if (img.pixel[i + k][j + l] < min)
+				if (se.data[k][l] == 1)
 				{
-					min = img.pixel[i + k][j + l];
+					if (img.pixel[i + k][j + l] < min)
+					{
+						min = img.pixel[i + k][j + l];
+					}
 				}
 			}
 		}
@@ -1617,14 +1649,13 @@ IMAGE blackTopHat(IMAGE img, STRUCTURE_ELEMENT se)
 		{
 			black_tophat.pixel[i][j] = img.pixel[i][j] - eroded_image.pixel[i][j];
 		}
-
-		// Libérer la mémoire des images temporaires
-		freeImage(opened_image);
-		freeImage(eroded_image);
-
-		// Retourner l'image Black Top-Hat
-		return black_tophat;
 	}
+
+	// Libérer la mémoire des images temporaires
+	liberationImage(&opened_image);
+	liberationImage(&eroded_image);
+
+	return black_tophat;
 }
 
 
@@ -1646,12 +1677,12 @@ IMAGE whiteTopHat(IMAGE img, STRUCTURE_ELEMENT se)
 		{
 			white_tophat.pixel[i][j] = img.pixel[i][j] - dilated_image.pixel[i][j];
 		}
-
-		// Libérer la mémoire des images temporaires
-		freeImage(closed_image);
-		freeImage(dilated_image);
-
-		// Retourner l'image White Top-Hat
-		return white_tophat;
 	}
+
+	// Libérer la mémoire des images temporaires
+	liberationImage(&closed_image);
+	liberationImage(&dilated_image);
+
+	// Retourner l'image White Top-Hat
+	return white_tophat;
 }

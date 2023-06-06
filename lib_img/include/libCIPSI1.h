@@ -17,10 +17,10 @@ typedef struct structureElement {
 
 typedef struct Region
 {
-    int x1;
-    int y1;
-    int x2;
-    int y2;
+    int x;
+    int y;
+    int width;
+    int height;
 } REGION;
 
 typedef struct rgb {
@@ -28,6 +28,12 @@ typedef struct rgb {
 	unsigned char G;
 	unsigned char B;
 } RGB;
+
+typedef struct point
+{
+	float x;
+	float y;
+} POINT;
 
 typedef struct imageRGB {
 	int   Nblig;
@@ -46,16 +52,21 @@ typedef struct signatures {
 
 typedef struct signature_composantes_connexes {
 	int surface;
+	int rayon;
 	float perimetre;
 	float compacite;
 	int bord;
+	POINT CG;
+	REGION region;
 } SIGNATURE_COMPOSANTE_CONNEXE;
 
 float scoreIOU(IMAGE im1, IMAGE im2);
-REGION* findRegions(IMAGE im, int* nbRegions);
-void expandRegion(IMAGE im, REGION* region);
-float computeOverlap(REGION r1, REGION r2);
-float scoreVinet(IMAGE im1, IMAGE im2);
+float scoreVinet(IMAGE test, IMAGE refc);
+float distanceSQ(POINT p1, POINT p2);
+char belongTo(POINT p, REGION reg);
+void applicateurLUTRef(IMAGE* img, int* LUT);
+IMAGE differenceImage(IMAGE im1, IMAGE im2);
+float localIOU(IMAGE test, IMAGE ref, REGION reg);
 
 IMAGE allocationImage(int Nblig, int Nbcol);
 void initialisationAleatoireImage(IMAGE img, int ngMin, int ngMax);
